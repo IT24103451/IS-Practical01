@@ -38,15 +38,36 @@ class VisualGridHuntGame:
             if tuple(op_pos) != (0, 0) and tuple(op_pos) not in self.walls and tuple(op_pos) not in self.food_positions:
                 self.opponents.append(op_pos)
 
+        self.agent_dir = 'Up'  # Facing direction ('Up', 'Down', 'Left', 'Right')
         self.score = 0
         self.steps = 0
         self.collision = False
 
     def get_percept(self) -> dict:
+        x, y = self.agent_pos
+        if self.agent_dir == 'Up':
+            front_pos = (x, y + 1)
+        elif self.agent_dir == 'Down':
+            front_pos = (x, y - 1)
+        elif self.agent_dir == 'Left':
+            front_pos = (x - 1, y)
+        elif self.agent_dir == 'Right':
+            front_pos = (x + 1, y)
+        else:
+            front_pos = (x, y + 1)
+
+        out_of_bounds = (
+            front_pos[0] < 0 or front_pos[0] >= self.width or
+            front_pos[1] < 0 or front_pos[1] >= self.height
+        )
+        wall_ahead = out_of_bounds or (front_pos in self.walls)
+        food_here = tuple(self.agent_pos) in self.food_positions
+
         return {
-            'agent_pos': list(self.agent_pos),
+            'wall_ahead': wall_ahead,
+            'food_here': food_here,
             'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
+            'smells_food': food_here,
             'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'collision': self.collision,
@@ -56,6 +77,8 @@ class VisualGridHuntGame:
 
     def execute_action(self, action: str):
         self.steps += 1
+        if action in ['Up', 'Down', 'Left', 'Right']:
+            self.agent_dir = action
         new_pos = list(self.agent_pos)
 
         if action == 'Up':
