@@ -1,6 +1,7 @@
 # visual_grid_game.py
 import random
 import tkinter as tk
+from agent import SearchAgent
 
 
 class VisualGridHuntGame:
@@ -64,6 +65,10 @@ class VisualGridHuntGame:
         food_here = tuple(self.agent_pos) in self.food_positions
 
         return {
+            'agent_pos': list(self.agent_pos),
+            'grid_size': (self.width, self.height),
+            'walls': list(self.walls),
+            'all_food': list(self.food_positions),
             'wall_ahead': wall_ahead,
             'food_here': food_here,
             'opponent_positions': [list(op) for op in self.opponents],
@@ -120,18 +125,21 @@ class VisualGridHuntGame:
                 self.collision = True
 
     def is_done(self) -> bool:
-        return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
+        return len(self.food_positions) == 0 or self.steps >= 200 or self.collision
 
 
 class GridGameGUI:
     """Tkinter wrapper that dynamically scales cell sizes to keep larger grids on screen."""
 
-    def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None):
+    def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None, algorithm='BFS'):
         self.root = root
         self.root.title("IT3012 - Scalable Multi-Agent Grid Hunt")
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
+
+        # Create the SearchAgent with the selected algorithm
+        self.agent = SearchAgent(algorithm=algorithm)
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -145,6 +153,16 @@ class GridGameGUI:
 
         self.label = tk.Label(root, text="Score: 0 | Steps: 0", font=("Arial", 14))
         self.label.pack(pady=10)
+
+        # Algorithm selector dropdown
+        ctrl_frame = tk.Frame(root)
+        ctrl_frame.pack(pady=5)
+
+        tk.Label(ctrl_frame, text="Algorithm:", font=("Arial", 11)).pack(side=tk.LEFT, padx=5)
+        self.algo_var = tk.StringVar(value=algorithm)
+        algo_menu = tk.OptionMenu(ctrl_frame, self.algo_var, 'BFS', 'DFS', 'UCS', command=self.change_algorithm)
+        algo_menu.config(font=("Arial", 11))
+        algo_menu.pack(side=tk.LEFT, padx=5)
 
         self.btn = tk.Button(root, text="Start Simulation", command=self.run_loop, font=("Arial", 12), bg="#000066",
                              fg="white")
@@ -199,19 +217,32 @@ class GridGameGUI:
         self.canvas.create_oval(x1, y1, x1 + self.cell_size * 0.7, y1 + self.cell_size * 0.7, fill="#000066",
                                 outline="#1e3a8a")
 
+    def change_algorithm(self, new_algo):
+        """Switch the active search algorithm and reset the agent's plan."""
+        self.agent.active_algo = new_algo
+        self.agent.plan = []  # Clear any existing plan so it re-plans with the new algorithm
+
     def run_loop(self):
         self.btn.config(state="disabled")
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
                 self.env.execute_action(action)
 
                 self.draw_grid()
-                self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
+                algo = self.agent.active_algo
+                self.label.config(
+                    text=f"[{algo}] Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}"
+                )
                 self.root.after(250, step)
             else:
-                end_text = f"Collision! Game Over! Final Score: {self.env.score}" if self.env.collision else f"Finished! Final Score: {self.env.score}"
+                algo = self.agent.active_algo
+                if self.env.collision:
+                    end_text = f"[{algo}] Collision! Game Over! Final Score: {self.env.score}"
+                else:
+                    end_text = f"[{algo}] Finished! Final Score: {self.env.score}"
                 self.label.config(text=end_text)
                 self.btn.config(state="normal")
 
@@ -220,6 +251,6 @@ class GridGameGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    # Try a larger grid size like 12x12 with 15 food and 3 opponents!
-    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
+    # Change algorithm here to observe different search behaviours: 'BFS', 'DFS', or 'UCS'
+    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0, algorithm='BFS')
     root.mainloop()

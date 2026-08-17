@@ -1,4 +1,5 @@
 import random
+import heapq
 from collections import deque
 
 
@@ -80,22 +81,79 @@ class ModelBasedAgent:
 
 
 class SearchAgent:
-    """A problem-solving agent using Breadth-First Search (BFS)."""
+    """
+    A problem-solving agent that uses uninformed search strategies
+    (BFS, DFS, UCS) to find a path from a start position to a goal.
+    All three algorithms maintain a 'reached' (visited) set to convert
+    Tree Search into Graph Search, preventing infinite loops.
+    """
 
+    def __init__(self, algorithm='BFS'):
+        self.plan = []                  # Stored sequence of actions to execute
+        self.active_algo = algorithm    # Which search to use: 'BFS', 'DFS', or 'UCS'
+
+    def sense_and_act(self, percept: dict) -> str:
+        # If the current plan is empty, compute a new one
+        if not self.plan:
+            agent_pos = tuple(percept['agent_pos'])
+            walls = [tuple(w) for w in percept['walls']]
+            grid_size = percept['grid_size']
+            all_food = [tuple(f) for f in percept['all_food']]
+
+            if not all_food:
+                return random.choice(['Up', 'Down', 'Left', 'Right'])
+
+            # Find the closest food pellet (Manhattan distance)
+            closest_food = min(
+                all_food,
+                key=lambda f: abs(f[0] - agent_pos[0]) + abs(f[1] - agent_pos[1])
+            )
+
+            # Execute the search algorithm matching self.active_algo
+            if self.active_algo == 'BFS':
+                path = self.bfs_search(agent_pos, closest_food, walls, grid_size)
+            elif self.active_algo == 'DFS':
+                path = self.dfs_search(agent_pos, closest_food, walls, grid_size)
+            elif self.active_algo == 'UCS':
+                path = self.ucs_search(agent_pos, closest_food, walls, grid_size)
+            else:
+                path = self.bfs_search(agent_pos, closest_food, walls, grid_size)
+
+            # Store the resulting action sequence in self.plan
+            if path:
+                self.plan = path
+            else:
+                return random.choice(['Up', 'Down', 'Left', 'Right'])
+
+        # Return the first action from the plan
+        return self.plan.pop(0)
+
+
+    # ------------------------------------------------------------------
+    # BFS – Breadth-First Search (FIFO Queue)
+    # Explores the shallowest (closest) nodes first.
+    # ------------------------------------------------------------------
     def bfs_search(self, start_pos, goal_pos, walls, grid_size):
         width, height = grid_size
         wall_set = set(walls)
+
+        # FIFO queue: each entry is (current_position, path_of_actions)
         queue = deque([(start_pos, [])])
+
+        # Reached set – tracks explored states (Graph Search)
         visited = {start_pos}
 
-        moves = [('Up', (0, 1)), ('Down', (0, -1)), ('Left', (-1, 0)), ('Right', (1, 0))]
+        moves = [('Up', (0, 1)), ('Down', (0, -1)),
+                 ('Left', (-1, 0)), ('Right', (1, 0))]
 
         while queue:
-            (curr_x, curr_y), path = queue.popleft()
+            (curr_x, curr_y), path = queue.popleft()  # FIFO: popleft()
 
+            # Goal test
             if (curr_x, curr_y) == goal_pos:
                 return path
 
+            # Expand current node
             for action, (dx, dy) in moves:
                 nx, ny = curr_x + dx, curr_y + dy
                 if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in wall_set:
@@ -103,4 +161,78 @@ class SearchAgent:
                         visited.add((nx, ny))
                         queue.append(((nx, ny), path + [action]))
 
-        return None
+        return None  # No path found
+
+    # ------------------------------------------------------------------
+    # DFS – Depth-First Search (LIFO Stack)
+    # Explores the deepest nodes first.
+    # ------------------------------------------------------------------
+    def dfs_search(self, start_pos, goal_pos, walls, grid_size):
+        width, height = grid_size
+        wall_set = set(walls)
+
+        # LIFO stack: each entry is (current_position, path_of_actions)
+        stack = [(start_pos, [])]
+
+        # Reached set – tracks explored states (Graph Search)
+        visited = {start_pos}
+
+        moves = [('Up', (0, 1)), ('Down', (0, -1)),
+                 ('Left', (-1, 0)), ('Right', (1, 0))]
+
+        while stack:
+            (curr_x, curr_y), path = stack.pop()  # LIFO: pop() from end
+
+            # Goal test
+            if (curr_x, curr_y) == goal_pos:
+                return path
+
+            # Expand current node
+            for action, (dx, dy) in moves:
+                nx, ny = curr_x + dx, curr_y + dy
+                if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in wall_set:
+                    if (nx, ny) not in visited:
+                        visited.add((nx, ny))
+                        stack.append(((nx, ny), path + [action]))
+
+        return None  # No path found
+
+    # ------------------------------------------------------------------
+    # UCS – Uniform-Cost Search (Priority Queue ordered by g(n))
+    # Explores the node with the lowest total path cost first.
+    # ------------------------------------------------------------------
+    def ucs_search(self, start_pos, goal_pos, walls, grid_size):
+        width, height = grid_size
+        wall_set = set(walls)
+
+        # Priority queue: each entry is (cumulative_cost, current_position, path_of_actions)
+        # heapq is a min-heap, so the lowest-cost node is popped first
+        frontier = [(0, start_pos, [])]
+
+        # Reached set – tracks explored states (Graph Search)
+        visited = set()
+
+        moves = [('Up', (0, 1)), ('Down', (0, -1)),
+                 ('Left', (-1, 0)), ('Right', (1, 0))]
+
+        while frontier:
+            cost, (curr_x, curr_y), path = heapq.heappop(frontier)  # Lowest g(n)
+
+            # Skip if already visited (a cheaper path was already processed)
+            if (curr_x, curr_y) in visited:
+                continue
+            visited.add((curr_x, curr_y))
+
+            # Goal test
+            if (curr_x, curr_y) == goal_pos:
+                return path
+
+            # Expand current node
+            for action, (dx, dy) in moves:
+                nx, ny = curr_x + dx, curr_y + dy
+                if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in wall_set:
+                    if (nx, ny) not in visited:
+                        step_cost = 1  # Each move costs 1 (uniform)
+                        heapq.heappush(frontier, (cost + step_cost, (nx, ny), path + [action]))
+
+        return None  # No path found
