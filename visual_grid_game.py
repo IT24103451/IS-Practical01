@@ -160,7 +160,7 @@ class GridGameGUI:
 
         tk.Label(ctrl_frame, text="Algorithm:", font=("Arial", 11)).pack(side=tk.LEFT, padx=5)
         self.algo_var = tk.StringVar(value=algorithm)
-        algo_menu = tk.OptionMenu(ctrl_frame, self.algo_var, 'BFS', 'DFS', 'UCS', command=self.change_algorithm)
+        algo_menu = tk.OptionMenu(ctrl_frame, self.algo_var, 'BFS', 'DFS', 'UCS', 'AStar', command=self.change_algorithm)
         algo_menu.config(font=("Arial", 11))
         algo_menu.pack(side=tk.LEFT, padx=5)
 
@@ -252,5 +252,5 @@ class GridGameGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     # Change algorithm here to observe different search behaviours: 'BFS', 'DFS', or 'UCS'
-    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0, algorithm='BFS')
+    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0, algorithm='AStar')
     root.mainloop()

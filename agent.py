@@ -1,5 +1,6 @@
 import random
 import heapq
+import math
 from collections import deque
 
 
@@ -83,14 +84,15 @@ class ModelBasedAgent:
 class SearchAgent:
     """
     A problem-solving agent that uses uninformed search strategies
-    (BFS, DFS, UCS) to find a path from a start position to a goal.
-    All three algorithms maintain a 'reached' (visited) set to convert
+    (BFS, DFS, UCS) and informed search (A*) to find a path from
+    a start position to a goal.
+    All algorithms maintain a 'reached' (visited) set to convert
     Tree Search into Graph Search, preventing infinite loops.
     """
 
     def __init__(self, algorithm='BFS'):
         self.plan = []                  # Stored sequence of actions to execute
-        self.active_algo = algorithm    # Which search to use: 'BFS', 'DFS', or 'UCS'
+        self.active_algo = algorithm    # Which search to use: 'BFS', 'DFS', 'UCS', or 'AStar'
 
     def sense_and_act(self, percept: dict) -> str:
         # If the current plan is empty, compute a new one
@@ -116,6 +118,8 @@ class SearchAgent:
                 path = self.dfs_search(agent_pos, closest_food, walls, grid_size)
             elif self.active_algo == 'UCS':
                 path = self.ucs_search(agent_pos, closest_food, walls, grid_size)
+            elif self.active_algo == 'AStar':
+                path = self.astar_search(agent_pos, closest_food, walls, grid_size)
             else:
                 path = self.bfs_search(agent_pos, closest_food, walls, grid_size)
 
@@ -236,3 +240,84 @@ class SearchAgent:
                         heapq.heappush(frontier, (cost + step_cost, (nx, ny), path + [action]))
 
         return None  # No path found
+
+    # ------------------------------------------------------------------
+    # Heuristic: Manhattan Distance
+    # h(n) = |x1 - x2| + |y1 - y2|
+    # ------------------------------------------------------------------
+    def manhattan_distance(self, pos, goal):
+        """Calculate Manhattan distance between two positions."""
+        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+    # ------------------------------------------------------------------
+    # Heuristic: Euclidean Distance
+    # h(n) = sqrt((x1 - x2)^2 + (y1 - y2)^2)
+    # ------------------------------------------------------------------
+    def euclidean_distance(self, pos, goal):
+        """Calculate Euclidean (straight-line) distance between two positions."""
+        return math.sqrt((pos[0] - goal[0]) ** 2 + (pos[1] - goal[1]) ** 2)
+
+    # ------------------------------------------------------------------
+    # A* Search (Priority Queue ordered by f(n) = g(n) + h(n))
+    # Combines path cost g(n) with heuristic estimate h(n) for
+    # optimal informed expansion. Supports switchable heuristics.
+    # ------------------------------------------------------------------
+    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan'):
+        width, height = grid_size
+        wall_set = set(walls)
+
+        # Select the heuristic function based on heuristic_type
+        if heuristic_type == 'euclidean':
+            heuristic = self.euclidean_distance
+        else:
+            heuristic = self.manhattan_distance
+
+        # Priority queue: (f_cost, g_cost, current_pos, path_taken)
+        # For the starting node: g(n) = 0, h(n) = heuristic(start, goal)
+        h_start = heuristic(start_pos, goal_pos)
+        frontier = [(h_start, 0, start_pos, [])]
+
+        # Reached set – tracks explored states (Graph Search)
+        reached_states = set()
+
+        moves = [('Up', (0, 1)), ('Down', (0, -1)),
+                 ('Left', (-1, 0)), ('Right', (1, 0))]
+
+        while frontier:
+            f_cost, g_cost, (curr_x, curr_y), path = heapq.heappop(frontier)
+
+            # Goal test – return path if we've reached the goal
+            if (curr_x, curr_y) == goal_pos:
+                return path
+
+            # Skip if already reached (a cheaper path was already processed)
+            if (curr_x, curr_y) in reached_states:
+                continue
+            reached_states.add((curr_x, curr_y))
+
+            # Expand current node – check four adjacent cells
+            for action, (dx, dy) in moves:
+                nx, ny = curr_x + dx, curr_y + dy
+                if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in wall_set:
+                    if (nx, ny) not in reached_states:
+                        g_new = g_cost + 1              # g_new = g_current + 1
+                        h_new = heuristic((nx, ny), goal_pos)  # h_new using chosen heuristic
+                        f_new = g_new + h_new            # f_new = g_new + h_new
+                        heapq.heappush(frontier, (f_new, g_new, (nx, ny), path + [action]))
+
+        return None  # No path found
+
+
+# ======================================================================
+# Testing Checkpoint: Verify heuristic outputs
+# ======================================================================
+if __name__ == "__main__":
+    agent = SearchAgent()
+    start = (0, 0)
+    goal = (3, 4)
+
+    manhattan = agent.manhattan_distance(start, goal)
+    euclidean = agent.euclidean_distance(start, goal)
+
+    print(f"Manhattan Distance from {start} to {goal}: {manhattan}")   # Expected: 7
+    print(f"Euclidean Distance from {start} to {goal}: {euclidean}")   # Expected: 5.0
